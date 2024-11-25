@@ -1,0 +1,65 @@
+import pdfplumber
+import re
+import os
+from openpyxl import Workbook
+
+def extract_data_from_pdf(pdf_path):
+    euro_pattern = r'\d{1,3}(?:\.\d{3})*,\d{2} ?EUR'
+    bastidor_pattern = r'-([A-HJ-NPR-Z0-9]{8})'
+    fecha_pattern = r'\b\d{2}/\d{2}/\d{4}\b'
+    importe = None
+    bastidor = None
+    fecha = None
+    
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if not importe:
+                importe_matches = re.findall(euro_pattern, text)
+                if importe_matches:
+                    importe = importe_matches[0]
+            if not bastidor:
+                bastidor_match = re.search(bastidor_pattern, text)
+                if bastidor_match:
+                    bastidor = bastidor_match.group(1)
+            if not fecha:
+                fecha_match = re.search(fecha_pattern, text)
+                if fecha_match:
+                    fecha = fecha_match.group()
+            if importe and bastidor and fecha:
+                break
+    
+    return importe, bastidor, fecha
+
+def process_multiple_pdfs(folder_path, output_excel):
+    results = []
+    
+    for file_name in os.listdir(folder_path):
+        if file_name.endswith(".pdf"):
+            pdf_path = os.path.join(folder_path, file_name)
+            importe, bastidor, fecha = extract_data_from_pdf(pdf_path)
+            if not importe:
+                importe = "No encontrado"
+            if not bastidor:
+                bastidor = "No encontrado"
+            if not fecha:
+                fecha = "No encontrado"
+            results.append({
+                "Archivo": file_name,
+                "Importe": importe,
+                "Bastidor": bastidor,
+                "Fecha": fecha
+            })
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Resultados"
+    ws.append(["Archivo", "Importe", "Bastidor", "Fecha"])
+    for result in results:
+        ws.append([result["Archivo"], result["Importe"], result["Bastidor"], result["Fecha"]])
+    wb.save(output_excel)
+    print(f"Resultados guardados en {output_excel}")
+
+pdf_folder = "./pdfs"
+output_file = "resultados.xlsx"
+process_multiple_pdfs(pdf_folder, output_file)
